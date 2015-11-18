@@ -1,4 +1,4 @@
-package com.baidao.socketconnection;
+package com.baidao.socketconnection.network;
 
 import android.os.SystemClock;
 import android.util.Log;
@@ -28,6 +28,7 @@ public class PacketManager {
     private HashMap<String, PacketTask> map = new HashMap<>();
     private Thread managerThread;
     private boolean isStop;
+    private HeartBeat heartBeat;
 
     public void setSendTimeout(long sendTimeout) {
         this.sendTimeout = sendTimeout;
@@ -39,12 +40,17 @@ public class PacketManager {
         this.resendTimes = resendTimes;
     }
 
+    public boolean isAuthed() {
+        return socketConnection.isAuthed();
+    }
+
     private int resendTimes = DEFAULT_RE_SEND_TIMES;
 
     public PacketManager(SocketConnection socketConnection) {
         this.socketConnection = socketConnection;
         packetWriter = new PacketWriter(this);
         packetReader = new PacketReader(this);
+        heartBeat = new HeartBeat(socketConnection);
     }
 
     void start() {
@@ -72,9 +78,11 @@ public class PacketManager {
         }
         packetReader.start();
         packetWriter.start();
+        heartBeat.start();
     }
 
     void stop() {
+        heartBeat.stop();
         if (packetWriter != null) {
             packetWriter.stop();
         }
@@ -87,6 +95,10 @@ public class PacketManager {
         }
     }
 
+    PacketFactory getPacketFactory() {
+        return socketConnection.getFactory();
+    }
+
     BufferedSink getWriter() {
         return socketConnection.getWriter();
     }
@@ -95,13 +107,23 @@ public class PacketManager {
         return socketConnection.getReader();
     }
 
+    void clearCachePacket() {
+        packetWriter.clearCachePacket();
+    }
+
+    void clearPacketPool() {
+        packetReader.clearPacketPool();
+    }
+
     void sendPacket(Packet packet) {
         if (packetWriter == null) {
             Log.i(TAG, "packetWriter is null");
             handleFailedPacket(packet);
             return ;
         }
-        startPacketTask(packet);
+        if (!packet.isHeartBeatPacket()) {
+            startPacketTask(packet);
+        }
         packetWriter.writerPacket(packet);
     }
 
@@ -153,7 +175,7 @@ public class PacketManager {
 
     void handleFailedPacket(Packet packet) {
         stopPacketTask(packet);
-        if (!packet.isExpread() && packet.getReSendTimes() < resendTimes) {
+        if (!packet.isExpread() && packet.getReSendTimes() < resendTimes && !packet.isHeartBeatPacket()) {
             Log.i(TAG, "resend packet. packetId: " + packet.getPacketId());
             sendPacket(packet);
         } else {
@@ -183,6 +205,9 @@ public class PacketManager {
     }
 
     private void handlePacket(Packet packet) {
+        if (packet.isHeartBeatPacket()) {
+            return ;
+        }
         if (isStop) {
             handle(packet);
         } else {
@@ -206,7 +231,9 @@ public class PacketManager {
         while ((packet = packetQueue.poll()) == null) {
             try {
                 if (!isStop) {
-                    packetQueue.wait();
+                    synchronized (packetQueue) {
+                        packetQueue.wait();
+                    }
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -216,6 +243,9 @@ public class PacketManager {
     }
 
     private void handle(Packet packet) {
+        if (packet.isHeartBeatPacket()) {
+            return ;
+        }
         if (packet != null) {
             switch (packet.getFlag()) {
                 case FLAG_RECEIVER:

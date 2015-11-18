@@ -1,4 +1,4 @@
-package com.baidao.socketconnection;
+package com.baidao.socketconnection.network;
 
 import android.util.Log;
 
@@ -31,15 +31,47 @@ public class SocketConnection {
     protected final Collection<ConnectionListener> connectionListeners = new CopyOnWriteArrayList();
     protected final Collection<PacketListener> packetListeners = new CopyOnWriteArrayList<>();
     private ReconnectionManager reconnectionManager;
-    private HeartBeatFactory factory;
-    private boolean isAutoReconnect = true;
-    private int connectTimeout = DEFAULT_CONNECT_TIMEOUT;
+    private PacketFactory factory;
 
-    HeartBeatFactory getFactory() {
+    public void setSendTimeout(int sendTimeout) {
+        packetManager.setSendTimeout(sendTimeout);
+    }
+
+    public void setResendTimes(int times) {
+        packetManager.setResendTimes(times);
+    }
+
+    public void setIsAutoReconnect(boolean isAutoReconnect) {
+        this.isAutoReconnect = isAutoReconnect;
+    }
+
+    private boolean isAutoReconnect = true;
+
+    public void setConnectTimeout(int connectTimeout) {
+        this.connectTimeout = connectTimeout;
+    }
+
+    private int connectTimeout = DEFAULT_CONNECT_TIMEOUT;
+    private boolean authed = false;
+
+    public void setIsAutoAuth(boolean isAutoAuth) {
+        this.isAutoAuth = isAutoAuth;
+    }
+
+    private boolean isAutoAuth = false;
+
+    PacketFactory getFactory() {
         return factory;
     }
 
-    public SocketConnection(){}
+    public void setFactory(PacketFactory factory) {
+        this.factory = factory;
+    }
+
+    public SocketConnection(){
+        this.packetManager = new PacketManager(this);
+        this.reconnectionManager = new ReconnectionManager(this);
+    }
 
     public SocketConnection(String host, int port) {
         this.host = host;
@@ -83,6 +115,7 @@ public class SocketConnection {
     public void sendPacket(Packet packet) {
         if (!isConnected()) {
             Log.i(TAG, "socket is closed");
+            handleFailedPacket(packet);
             return ;
         }
         packetManager.sendPacket(packet);
@@ -107,11 +140,18 @@ public class SocketConnection {
         try {
             if (isForce) {
                 disconnect();
+                packetManager.clearCachePacket();
             }
             if (!isConnected()) {
                 this.socket = newSocket(host, port);
                 initConnection();
                 notifyConnected();
+                if (isAutoAuth) {
+                    Packet packet = factory.getAuthPacket();
+                    if (packet != null) {
+                        sendPacket(packet);
+                    }
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -125,16 +165,22 @@ public class SocketConnection {
     }
 
     public final boolean isConnected() {
-        return socket != null && socket.isConnected();
+        return socket != null && socket.isConnected() && !socket.isClosed();
     }
 
-    public boolean isLogin() {
-        return isConnected();
+    public boolean isAuthed() {
+        return authed;
+    }
+
+    public void setAuthed(boolean authed) {
+        this.authed = authed;
     }
 
     public final void disconnect() {
+        authed = false;
         if (packetManager != null) {
             packetManager.stop();
+            packetManager.clearPacketPool();
         }
         if (!isConnected()) {
             return ;
@@ -162,6 +208,7 @@ public class SocketConnection {
         connectionListeners.clear();
         packetListeners.clear();
         disconnect();
+        Log.i(TAG, "--socketconnection is released");
     }
 
     public BufferedSink getWriter() {
@@ -216,44 +263,6 @@ public class SocketConnection {
             if (packetListener.shouldProcess(packet)) {
                 packetListener.processPacket(packet, this);
             }
-        }
-    }
-
-    public static class Builder{
-        private SocketConnection socketConnection = new SocketConnection();
-        public Builder withServer(String host, int port) {
-            socketConnection.host = host;
-            socketConnection.port = port;
-            return this;
-        }
-
-        public Builder withHeartBeatFactory(HeartBeatFactory factory) {
-            socketConnection.factory = factory;
-            return this;
-        }
-
-        public Builder withAutoReconnect(boolean b) {
-            socketConnection.isAutoReconnect = b;
-            return this;
-        }
-
-        public Builder withResendTimes(int times) {
-            socketConnection.packetManager.setResendTimes(times);
-            return this;
-        }
-
-        public Builder withConnectTimeout(int connectTimeout) {
-            socketConnection.connectTimeout = connectTimeout;
-            return this;
-        }
-
-        public Builder withSendTimeout(int sendTimeout) {
-            socketConnection.packetManager.setSendTimeout(sendTimeout);
-            return this;
-        }
-
-        public SocketConnection build() {
-            return socketConnection;
         }
     }
 }

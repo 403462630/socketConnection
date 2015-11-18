@@ -1,4 +1,4 @@
-package com.baidao.socketconnection;
+package com.baidao.socketconnection.network;
 
 import android.util.Log;
 
@@ -20,19 +20,27 @@ public class PacketReader {
     private static AtomicInteger integer = new AtomicInteger();
     private boolean isStop = false;
     private PacketPool pool;
+    private long index;
 
     public PacketReader(PacketManager packetManager) {
         this.packetManager = packetManager;
         pool = new PacketPool();
     }
 
-    public void stop() {
+    void clearPacketPool() {
+        if (pool != null) {
+            pool.clear();
+        }
+    }
+
+    void stop() {
         this.isStop = true;
     }
 
-    public void start() {
+    void start() {
         reader = packetManager.getReader();
         isStop = false;
+        index = 0;
         if (readerThread != null && readerThread.isAlive()) {
             Log.i(TAG, "ReaderThread: " + readerThread.getName() + " is alive");
             return ;
@@ -53,9 +61,9 @@ public class PacketReader {
         while (!isStop) {
             Packet packet = null;
             try {
-                packet = Packet.build(reader);
+                packet = packetManager.getPacketFactory().buildPacket(reader);
                 if (packet != null) {
-                    if (packet.header.hasNextSubPacket()) {
+                    if (packet.hasNextSubPacket()) {
                         pool.add(packet);
                     } else {
                         packet = pool.get(packet);
@@ -63,17 +71,24 @@ public class PacketReader {
                         Log.v(TAG, "---------receive packet content: " + packet.toString());
                     }
                 }
+                index = 0;
             } catch (EOFException e) {
                 Log.v(TAG, "not receive anything from server");
+                index ++;
+                if (index > 10) {
+                    Log.v(TAG, "not receive anything from server; index=" + index);
+                    index = 0;
+                    packetManager.handleReceiverException(new SocketException(e.getMessage()));
+                }
             } catch (IOException e) {
                 e.printStackTrace();
                 packetManager.handleReceiverException(e);
             }
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+//            try {
+//                Thread.sleep(100);
+//            } catch (InterruptedException e) {
+//                e.printStackTrace();
+//            }
         }
     }
 }

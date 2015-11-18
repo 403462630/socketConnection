@@ -1,4 +1,4 @@
-package com.baidao.socketconnection;
+package com.baidao.socketconnection.network;
 
 import java.util.HashMap;
 
@@ -13,7 +13,7 @@ public class PacketPool {
         String id = packet.getPacketId();
         Packet tempPacket = packetPool.get(id);
         if (tempPacket != null) {
-            packet.body = tempPacket.body + packet.body;
+            packet.setBody(tempPacket.getBody() + packet.getBody());
         }
         packetPool.put(id, packet);
     }
@@ -26,5 +26,9 @@ public class PacketPool {
             return p;
         }
         return packet;
+    }
+
+    public void clear() {
+        packetPool.clear();
     }
 }

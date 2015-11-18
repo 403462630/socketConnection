@@ -1,10 +1,9 @@
-package com.baidao.socketconnection;
+package com.baidao.socketconnection.network;
 
 import android.util.Log;
 
 import com.baidao.socketconnection.listener.ConnectionListener;
 
-import java.net.SocketException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**

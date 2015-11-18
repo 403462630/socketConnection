@@ -1,4 +1,4 @@
-package com.baidao.socketconnection;
+package com.baidao.socketconnection.network;
 
 import android.os.SystemClock;
 import android.util.Log;
@@ -13,7 +13,7 @@ public class PacketTask {
     private static final String TAG = "PacketTask";
     private Packet packet;
     static final long TIME_OUT = 20 * 1000;
-    private Timer timer;
+    private Timer timer = new Timer();
     private PacketManager packetManager;
     long startTime;
     private long timeout = TIME_OUT;

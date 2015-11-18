@@ -1,4 +1,4 @@
-package com.baidao.socketconnection;
+package com.baidao.socketconnection.network;
 
 import android.util.Log;
 
@@ -57,7 +57,9 @@ public class PacketWriter {
         Packet packet = null;
         while (!isStop && (packet = packetQueue.poll()) == null) {
             try {
-                packetQueue.wait();
+                synchronized (packetQueue) {
+                    packetQueue.wait();
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -67,7 +69,7 @@ public class PacketWriter {
 
     public void writerPacket(Packet packet) {
         try {
-            if (packet != null) {
+            if (packet != null && (!isStop || !packet.isHeartBeatPacket())) {
                 packetQueue.put(packet);
             }
         } catch (InterruptedException e) {
@@ -80,7 +82,8 @@ public class PacketWriter {
         }
     }
 
-    public void clear() {
+    public void clearCachePacket() {
+        Log.i(TAG, "-----clearCachePacket");
         Packet packet = null;
         while ((packet = packetQueue.poll()) != null) {
             packetManager.handleClearPacket(packet);
@@ -90,6 +93,13 @@ public class PacketWriter {
     private void write() {
         while (!isStop) {
             Packet packet = nextPacket();
+            if (packet == null || packet.isExpread()) {
+                continue;
+            }
+            if (packet.isShouldWaitAuth() && !packetManager.isAuthed()) {
+                writerPacket(packet);
+                continue;
+            }
             if (packet != null && !packet.isExpread()) {
                 try {
                     packetManager.handleWrite(packet);

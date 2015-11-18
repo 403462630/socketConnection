@@ -1,9 +1,11 @@
 package com.baidao.socketconnection.listener;
 
-import com.baidao.socketconnection.Packet;
-import com.baidao.socketconnection.SocketConnection;
 
-public interface PacketListener {
-    boolean shouldProcess(Packet packet);
-    void processPacket(Packet packet, SocketConnection socketConnection);
+import com.baidao.socketconnection.network.Packet;
+import com.baidao.socketconnection.network.SocketConnection;
+
+public interface PacketListener<T> {
+    boolean shouldProcess(Packet<T> packet);
+    void processPacket(Packet<T> packet, SocketConnection socketConnection);
+    T getContent(String content);
 }
